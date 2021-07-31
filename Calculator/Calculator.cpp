@@ -1,5 +1,12 @@
 #include "std_lib_facilities.h"
 
+// constants
+const char number = '8';
+const char quit = 'q';
+const char print = ';';
+const char prompt = '>';
+const char result = '=';
+
 class Token
 {
 public:
@@ -51,7 +58,7 @@ Token Token_stream::get()
 		{
 		case ';':	// end an expression
 		case 'q':	// quit program
-		case '(': case ')': case '+': case '-': case '*': case '/':
+		case '(': case ')': case '+': case '-': case '*': case '/': case '%':
 			temp = Token(ch);
 			break;
 		case '.':
@@ -61,7 +68,7 @@ Token Token_stream::get()
 			cin.putback(ch);			// put a digit back to the input stream
 			double val;	
 			cin >> val;					// read a floating-point number
-			return Token{ '8', val };	// '8' represent a number
+			return Token{ number, val };
 		}
 		default:
 			error("Bad token");
@@ -82,29 +89,32 @@ int main()
 {
 	try
 	{
-		double val = 0;
 		while (cin)
 		{
+			cout << prompt;
 			Token t = ts.get();
-			if (t.kind == 'q') break;
-			if (t.kind == ';')
-				cout << "=" << val << '\n';
-			else
-				ts.putback(t);
-			val = expression();
+			while (t.kind == print) t = ts.get();
+			if (t.kind == quit)
+			{
+				keep_window_open();
+				return 0;
+			}
+			ts.putback(t);
+			cout << result << expression() << '\n';
 		}
 		keep_window_open();
+		return 0;
 	}
 	catch (exception& e)
 	{
 		cerr << e.what() << '\n';
-		keep_window_open();
+		keep_window_open("~~");
 		return 1;
 	}
 	catch (...)
 	{
 		cerr << "exception \n";
-		keep_window_open();
+		keep_window_open("~~");
 		return 2;
 	}
 	return 0;
@@ -157,6 +167,14 @@ double term()
 			t = ts.get();
 			break;
 		}
+		case '%':
+		{
+			double d = primary();
+			if (d == 0) error("divide by zero");
+			left = fmod(left, d);
+			t = ts.get();
+			break;
+		}
 		default:
 			ts.putback(t);	// put t back to token stream
 			return left;
@@ -180,8 +198,12 @@ double primary()
 		return d;	// return expression result to caller
 		break;
 	}
-	case '8':		// '8' represent numbers
+	case number:
 		return t.value;	// return the number value to caller
+	case '-':
+		return -primary();
+	case '+':
+		return primary();
 	default:
 		error("primary expected");
 	}
