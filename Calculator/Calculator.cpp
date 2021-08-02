@@ -1,3 +1,53 @@
+/*
+	Simple Calculator
+
+	Originally written by Bjarne Stroustrup
+	Rewritten by Jaka Pratama Widiyanto
+
+	This program implements a basic expression calculator.
+	Input from cin, output to cout.
+	The grammar for input is
+
+	Statement:
+		Expression
+		Print
+		Quit
+	Print:
+		;
+	Quit:
+		q
+	Expression:
+		Term 
+		Expression + Term
+		Expression - Term
+	Term:
+		Primary
+		Term * Primary
+		Term / Primary
+		Term % Primary
+	Primary
+		Number
+		( Expression )
+		- Primary
+		+ Primary
+	Number:
+		floating-point literal
+
+	Input comes from cin through the Token_stream called ts.
+	
+	The grammar for calculator with variable:
+	Calculation:
+		Statement
+		Print
+		Quit
+		Calculation Statement
+	Statement:
+		Declaration
+		Expression
+	Declaration:
+		"let" Name "=" Expression
+*/
+
 #include "std_lib_facilities.h"
 
 // constants
@@ -24,6 +74,7 @@ public:
 	Token_stream() : full(false), buffer(' ') {}
 	Token get();				// get a token
 	void putback(Token t);		// put a Token back to stream buffer
+	void ignore(char c);
 private:
 	bool full;					// is there a Token in the buffer?
 	Token buffer;				// where we keep a token from putback()
@@ -40,8 +91,6 @@ void Token_stream::putback(Token t)
 
 Token Token_stream::get()
 {
-	Token temp{ ' ' };	// temp storage for the returns
-
 	// do we already have a Token ready?
 	if (full)
 	{	
@@ -58,8 +107,14 @@ Token Token_stream::get()
 		{
 		case ';':	// end an expression
 		case 'q':	// quit program
-		case '(': case ')': case '+': case '-': case '*': case '/': case '%':
-			temp = Token(ch);
+		case '(': 
+		case ')': 
+		case '+': 
+		case '-': 
+		case '*': 
+		case '/': 
+		case '%':
+			return Token{ch};
 			break;
 		case '.':
 		case '0': case '1': case '2': case '3': case '4':
@@ -74,8 +129,32 @@ Token Token_stream::get()
 			error("Bad token");
 		}
 	}
-	return temp;
 }
+
+void Token_stream::ignore(char c)
+	// c represents kind of token
+{
+	if (full && c == buffer.kind)
+	{
+		full = false;
+		return;
+	}
+	full = false;
+
+	// search input
+	char ch = 0;
+	while (cin >> ch)
+	{
+		if (ch == c) return;
+	}
+}
+
+class Variable
+{
+public:
+	string name;
+	double value;
+};
 
 Token_stream ts;		// provides get() and putback()
 // deal with + and -
@@ -84,24 +163,42 @@ double expression();	// declaration so that primary() can call expression()
 double term();	 
 // deal with numbers and parentheses
 double primary();
+// get expression from user and start process
+void calculate();
+// clean up buffer
+void clean_up_mess();
+// handle expression and declaration
+double statement();
+
+Vector<Variable> var_table;
+
+double get_value(string s)
+	// return the value of the variable named s
+{
+	for (const Variable& v : var_table)
+		if (v.name == s) return v.value;
+	error("get: undefined variable ", s);
+}
+
+void set_value(string s, double d)
+	// set the value of variable named s to d
+{
+	for (Variable& v : var_table)
+	{
+		if (v.name == s)
+		{
+			v.value = d;
+			return;
+		}
+	}
+	error("set: undefined variable ", s);
+}
 
 int main()
 {
 	try
 	{
-		while (cin)
-		{
-			cout << prompt;
-			Token t = ts.get();
-			while (t.kind == print) t = ts.get();
-			if (t.kind == quit)
-			{
-				keep_window_open();
-				return 0;
-			}
-			ts.putback(t);
-			cout << result << expression() << '\n';
-		}
+		calculate();
 		keep_window_open();
 		return 0;
 	}
@@ -207,4 +304,76 @@ double primary()
 	default:
 		error("primary expected");
 	}
+}
+
+// deal with user input and start evaluate the expression
+void calculate()
+{
+	while (cin)
+	try {
+		cout << prompt;
+		Token t = ts.get();
+		while (t.kind == print) t = ts.get();	// discard all print
+		if (t.kind == quit) return;
+		ts.putback(t);
+		cout << result << statement() << '\n';
+	}
+	catch (exception& e)
+	{
+		cerr << e.what() << '\n';	// write error messages
+		clean_up_mess();
+	}
+}
+
+void clean_up_mess()
+{
+	while (cin)
+	{
+		ts.ignore(print);
+	}
+}
+
+double statement()
+{
+	Token t = ts.get();
+	switch (t.kind)
+	{
+	case let:
+		return declaration();
+	default:
+		ts.putback(t);
+		return expression();
+	}
+}
+
+bool is_declared(string var)
+	// is var already in var_table?
+{
+	for (const Variable& v : var_table)
+		if (v.name == var) return true;
+	return false;
+}
+
+double define_name(string var, string val)
+{
+	if (is_declared(var)) error(var, " declared twice");
+	var_table.push_back(Variable(var, val));
+	return val;
+}
+
+double declaration()
+	// assume we have seen "let"
+	// handle: name = expression
+	// declare a variable called "name" with the initial value "expression"
+{
+	Token t = ts.get();
+	if (t.kind == name) error("name expected in declaration");
+	string var_name = t.name;
+
+	Token t2 = ts.get();
+	if (t2.kind != '=') error("= missing in declaration of ", var_name);
+
+	double d = expression();
+	define_name(var_name, d);
+	return d;
 }
